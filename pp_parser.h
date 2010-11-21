@@ -38,7 +38,7 @@ extern char* tokens;
 
 //Constructor
 void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourceCode);
-void pp_parser_reset_macros();
+void pp_parser_reset();
 HRESULT pp_parser_parse(pp_parser* self);
 HRESULT pp_parser_parse_directive(pp_parser* self);
 HRESULT pp_parser_include(pp_parser* self, char* filename);

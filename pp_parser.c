@@ -110,11 +110,8 @@ void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourc
 /**
  * Undefines and frees all currently defined macros.  This should be called 
  * before and after preprocessing a script.
- * TODO: if we switch to a buffer-based solution for token storage in the future, 
- * this function should also free the token buffer.  It should also be renamed 
- * to pp_parser_reset() in that case.
  */
-void pp_parser_reset_macros()
+void pp_parser_reset()
 {
 	List_Reset(&macros); // start at first element in list
 	while(macros.size > 0)
@@ -290,7 +287,7 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	bytes_read = readpackfile(handle, buffer, length);
 	closepackfile(handle);
 	
-	if(bytes_read != length) { printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno)); }
+	if(bytes_read != length) { printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno)); return E_FAIL; }
 	
 	// Parse the source code in the buffer
 	pp_parser_init(&incparser, self->script, filename, buffer);
