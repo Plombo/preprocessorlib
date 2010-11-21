@@ -207,7 +207,8 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			char* filename;
 			skip_whitespace();
 			
-			if(token.theType != PP_TOKEN_STRING_LITERAL) {
+			if(token.theType != PP_TOKEN_STRING_LITERAL)
+			{
 				printf("Preprocessor error: %s: %i: couldn't interpret #include path '%s'\n", self->filename, token.theTextPosition.row, token.theSource);
 				return E_FAIL;
 			}
@@ -226,7 +227,9 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			char* contents = tracemalloc("pp_parser_define", MACRO_CONTENTS_SIZE);
 			
 			skip_whitespace();
-			if(token.theType != PP_TOKEN_IDENTIFIER) { // Macro must have at least a name before the newline
+			if(token.theType != PP_TOKEN_IDENTIFIER)
+			{
+				// Macro must have at least a name before the newline
 				printf("Preprocessor error: no macro name given in #define directive\n");
 				return E_FAIL;
 			}
@@ -234,13 +237,15 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			// Parse macro name and contents
 			strcpy(name, token.theSource);
 			contents[0] = '\0';
-			while(1) {
+			while(1)
+			{
 				pp_lexer_GetNextToken(&self->lexer, &token);
 				if((token.theType == PP_TOKEN_NEWLINE) || (token.theType == PP_TOKEN_EOF)) { emit(token); break; }
 				else if(strcmp(token.theSource, "\\") == 0) pp_lexer_GetNextToken(&self->lexer, &token); // allows escaping line breaks with "\"
 				
-				if((strlen(contents) + strlen(token.theSource) + 1) > MACRO_CONTENTS_SIZE) {
-					// prevent buffer overflow
+				if((strlen(contents) + strlen(token.theSource) + 1) > MACRO_CONTENTS_SIZE)
+				{
+					// Prevent buffer overflow
 					printf("Preprocessor error: length of macro contents is too long; must be <= %i characters\n", MACRO_CONTENTS_SIZE);
 					return E_FAIL;
 				}
@@ -287,7 +292,11 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	bytes_read = readpackfile(handle, buffer, length);
 	closepackfile(handle);
 	
-	if(bytes_read != length) { printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno)); return E_FAIL; }
+	if(bytes_read != length)
+	{
+		printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno));
+		return E_FAIL;
+	}
 	
 	// Parse the source code in the buffer
 	pp_parser_init(&incparser, self->script, filename, buffer);
