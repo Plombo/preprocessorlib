@@ -1,7 +1,5 @@
 // Quick program to test the preprocessor lexer.
-// Compile with the following line:
-// gcc -g -Wall -I../scriptlib -I.. -I../tracelib pp_lexer.c pp_test.c -olextest
-// gcc -g -Wall -I../scriptlib -I.. -I../tracelib -I../gamelib -I../ramlib -I../.. pp_test.c pp_lexer.c pp_parser.c List.c ../scriptlib/Stack.c -oparsetest
+// Compile using build.sh.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -75,7 +73,7 @@ bool parseFile(char* filename)
 	free(buffer);
 	
 	printf("%s", tokens);
-	pp_parser_reset_macros();
+	pp_parser_reset();
 	
 	return success;
 }
