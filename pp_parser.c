@@ -36,12 +36,16 @@
 #define tracecalloc(name, size)		calloc(1, size)
 #define tracerealloc(ptr, size)		realloc(ptr, size)
 #define tracefree(ptr)				free(ptr)
-//#define emit(tkn)					fprintf(stdout, "%s", tkn.theSource)
+#define openpackfile(fname, pname)	((int)fopen(fname, "rb"))
+#define readpackfile(hnd, buf, len)	fread(buf, 1, len, (FILE*)hnd)
+#define seekpackfile(hnd, loc, md)	fseek((FILE*)hnd, loc, md)
+#define tellpackfile(hnd)			ftell((FILE*)hnd)
+#define closepackfile(hnd)			fclose((FILE*)hnd)
 #else // otherwise, we can use OpenBOR functionality like tracemalloc and writeToLogFile
 #include "tracemalloc.h"
 #include "globals.h"
 #include "packfile.h"
-//#define emit(tkn)					Script_AppendText(self->script, tkn.theSource, self->filename)
+#define tellpackfile(hnd)			seekpackfile(hnd, 0, SEEK_CUR)
 #endif
 
 /**
@@ -56,7 +60,6 @@ List macros = {NULL, NULL, NULL, NULL, 0, 0};
  * better, we could just use the buffer to store the resulting string, and not 
  * have to deal with concatenating all of the tokens when we're finished.
  */
-//List tokens = {NULL, NULL, NULL, NULL, 0, 0};
 char* tokens = NULL;
 static int token_bufsize = 0;
 static int tokens_length = 0;
@@ -65,6 +68,7 @@ static int tokens_length = 0;
  * Emits a token to the token buffer, enlarging the token buffer if necessary. 
  * (Too bad strlcat() isn't part of the C standard library, or even in glibc.)
  * \pre token buffer is non-NULL
+ * @param token the pp_token to emit
  */
 static __inline__ void emit(pp_token token)
 {
@@ -249,7 +253,6 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			
 			// Add macro to list
 			List_InsertAfter(&macros, contents, name);
-			//printf("Defining macro '%s' as '%s'\n", name, contents);
 			
 			break;
 		}
@@ -271,33 +274,22 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	char* buffer;
 	int length;
 	int bytes_read;
+	int handle;
 	
 	// Open the file and determine its size
-#if PP_TEST // use stdio functions for file I/O
-	FILE* fp = fopen(filename, "rb");
-	if(fp == NULL) return E_FAIL;
-	fseek(fp, 0, SEEK_END);
-	length = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-#else // use packfile functions for file I/O
-	int handle = openpackfile(filename, packfile);
+	handle = openpackfile(filename, packfile);
 	if(handle < 0) return E_FAIL;
-	length = seekpackfile(handle, 0, SEEK_END);
+	seekpackfile(handle, 0, SEEK_END);
+	length = tellpackfile(handle);
 	seekpackfile(handle, 0, SEEK_SET);
-#endif	
 	
 	// Allocate a buffer for the file's contents
 	buffer = tracemalloc("pp_parser_include", length + 1);
 	memset(buffer, 0, length + 1);
 	
 	// Read the file into the buffer
-#if PP_TEST
-	bytes_read = fread(buffer, 1, length, fp);
-	fclose(fp);
-#else
 	bytes_read = readpackfile(handle, buffer, length);
 	closepackfile(handle);
-#endif
 	
 	if(bytes_read != length) { printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno)); }
 	
