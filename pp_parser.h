@@ -34,6 +34,7 @@ typedef struct pp_parser {
     bool newline;
 } pp_parser;
 
+extern char* tokens;
 
 //Constructor
 void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourceCode);

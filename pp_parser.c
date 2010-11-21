@@ -25,19 +25,23 @@
 #include <errno.h>
 #include "List.h"
 #include "pp_parser.h"
+#include "borendian.h"
 
-#define skip_whitespace()	do { pp_lexer_GetNextToken(&self->lexer, &token); } while(token.theType == PP_TOKEN_WHITESPACE)
+#define DEFAULT_TOKEN_BUFFER_SIZE	4096
+#define skip_whitespace()			do { pp_lexer_GetNextToken(&self->lexer, &token); } while(token.theType == PP_TOKEN_WHITESPACE)
 
 #if PP_TEST // using pp_test.c to test the preprocessor functionality; OpenBOR functionality is not available
 #undef printf
 #define tracemalloc(name, size)		malloc(size)
+#define tracecalloc(name, size)		calloc(1, size)
+#define tracerealloc(ptr, size)		realloc(ptr, size)
 #define tracefree(ptr)				free(ptr)
-#define emit(tkn)					fprintf(stdout, "%s", tkn.theSource)
+//#define emit(tkn)					fprintf(stdout, "%s", tkn.theSource)
 #else // otherwise, we can use OpenBOR functionality like tracemalloc and writeToLogFile
 #include "tracemalloc.h"
 #include "globals.h"
 #include "packfile.h"
-#define emit(tkn)					Script_AppendText(self->script, tkn.theSource, self->filename)
+//#define emit(tkn)					Script_AppendText(self->script, tkn.theSource, self->filename)
 #endif
 
 /**
@@ -54,6 +58,29 @@ List macros = {NULL, NULL, NULL, NULL, 0, 0};
  */
 //List tokens = {NULL, NULL, NULL, NULL, 0, 0};
 char* tokens = NULL;
+static int token_bufsize = 0;
+static int tokens_length = 0;
+
+/**
+ * Emits a token to the token buffer, enlarging the token buffer if necessary. 
+ * (Too bad strlcat() isn't part of the C standard library, or even in glibc.)
+ * \pre token buffer is non-NULL
+ */
+static __inline__ void emit(pp_token token)
+{
+	int toklen = strlen(token.theSource);
+	if(toklen + tokens_length >= token_bufsize)
+	{
+		int new_bufsize = token_bufsize + 1024;
+		tokens = tracerealloc(tokens, new_bufsize);
+		memset(tokens + token_bufsize, 0, new_bufsize - token_bufsize);
+		printf("Enlarged the token buffer from %d to %d\n", token_bufsize, new_bufsize); // TODO: remove this line
+		token_bufsize = new_bufsize;
+	}
+	
+	strncat(tokens, token.theSource, toklen);
+	tokens_length += toklen;
+}
 
 /**
  * Initializes a preprocessor parser (pp_parser) object.
@@ -68,10 +95,12 @@ void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourc
 	self->filename = filename;
 	self->sourceCode = sourceCode;
 	
+	// allocate token buffer with default size of 4 KB; expand it later if needed
 	if(tokens == NULL)
 	{
-		tokens = tracemalloc("pp_parser tokens", 4096); // default buffer size of 4 KB, expand it later if needed
-		memset(tokens, 0, 4096);
+		tokens = tracecalloc("pp_parser tokens", DEFAULT_TOKEN_BUFFER_SIZE);
+		token_bufsize = DEFAULT_TOKEN_BUFFER_SIZE;
+		tokens_length = 0;
 	}
 }
 
@@ -85,13 +114,18 @@ void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourc
 void pp_parser_reset_macros()
 {
 	List_Reset(&macros); // start at first element in list
-	while(macros.size > 0) {
+	while(macros.size > 0)
+	{
 		tracefree(List_Retrieve(&macros));
 		List_Remove(&macros);
 	}
 	
 	if(tokens != NULL)
+	{
 		tracefree(tokens);
+		tokens = NULL;
+		token_bufsize = tokens_length = 0;
+	}
 }
 
 /**
@@ -109,9 +143,9 @@ HRESULT pp_parser_parse(pp_parser* self)
 	while(SUCCEEDED(pp_lexer_GetNextToken(&self->lexer, &token))) {
 		switch(token.theType) {
 			case PP_TOKEN_DIRECTIVE:
-				if(self->newline && !self->slashComment && !self->starComment) {
-					/* only parse the "#" symbol when it's at the beginning of a 
-					 * line (ignoring whitespace) and not in a comment */
+				if(self->newline && !self->slashComment && !self->starComment)
+				{ /* only parse the "#" symbol when it's at the beginning of a 
+				   * line (ignoring whitespace) and not in a comment */
 					if(FAILED(pp_parser_parse_directive(self))) return E_FAIL;
 				} else emit(token);
 				break;
