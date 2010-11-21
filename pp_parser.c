@@ -7,7 +7,7 @@
  */
 
 /**
- * This is the parser for the script preprocessor.  Its purpose is to emit the 
+ * This is the parser for the script preprocessor.  Its purpose is to emit(token) the 
  * preprocessed source code for use by scriptlib.  It is not related to the 
  * parser in scriptlib because it does something entirely different.
  * 
@@ -19,19 +19,25 @@
  * @date 15 October 2010
  */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <malloc.h>
+#include <errno.h>
+#include "List.h"
 #include "pp_parser.h"
-#define SKIP_WHITESPACE	do { pp_lexer_GetNextToken(&self->lexer, &token); } while(token.theType == PP_TOKEN_WHITESPACE)
+
+#define skip_whitespace()	do { pp_lexer_GetNextToken(&self->lexer, &token); } while(token.theType == PP_TOKEN_WHITESPACE)
 
 #if PP_TEST // using pp_test.c to test the preprocessor functionality; OpenBOR functionality is not available
 #undef printf
 #define tracemalloc(name, size)		malloc(size)
 #define tracefree(ptr)				free(ptr)
-#define EMIT						fprintf(stdout, "%s", token.theSource)
+#define emit(tkn)					fprintf(stdout, "%s", tkn.theSource)
 #else // otherwise, we can use OpenBOR functionality like tracemalloc and writeToLogFile
 #include "tracemalloc.h"
 #include "globals.h"
 #include "packfile.h"
-#define EMIT						Script_AppendText(self->script, token.theSource, self->filename)
+#define emit(tkn)					Script_AppendText(self->script, tkn.theSource, self->filename)
 #endif
 
 /**
@@ -107,42 +113,42 @@ HRESULT pp_parser_parse(pp_parser* self)
 					/* only parse the "#" symbol when it's at the beginning of a 
 					 * line (ignoring whitespace) and not in a comment */
 					if(FAILED(pp_parser_parse_directive(self))) return E_FAIL;
-				} else EMIT;
+				} else emit(token);
 				break;
 			case PP_TOKEN_COMMENT_SLASH:
 				if(!self->starComment) self->slashComment = 1;
 				self->newline = 0;
-				EMIT;
+				emit(token);
 				break;
 			case PP_TOKEN_COMMENT_STAR_BEGIN:
 				if(!self->slashComment) self->starComment = 1;
 				self->newline = 0;
-				EMIT;
+				emit(token);
 				break;
 			case PP_TOKEN_COMMENT_STAR_END:
 				self->starComment = 0;
 				self->newline = 0;
-				EMIT;
+				emit(token);
 				break;
 			case PP_TOKEN_NEWLINE:
 				self->slashComment = 0;
 				self->newline = 1;
-				EMIT;
+				emit(token);
 				break;
 			case PP_TOKEN_WHITESPACE:
-				EMIT;
+				emit(token);
 				// whitespace doesn't affect the newline property
 				break;
 			case PP_TOKEN_IDENTIFIER:
 				if(List_FindByName(&macros, token.theSource)) pp_parser_insert_macro(self, token.theSource);
-				else EMIT;
+				else emit(token);
 				break;
 			case PP_TOKEN_EOF:
-				EMIT;
+				emit(token);
 				return S_OK;
 			default:
 				self->newline = 0;
-				EMIT;
+				emit(token);
 		}
 	}
 	printf("Preprocessor error: end of source code reached without EOF token\n");
@@ -160,12 +166,12 @@ HRESULT pp_parser_parse(pp_parser* self)
 HRESULT pp_parser_parse_directive(pp_parser* self) {
 	pp_token token;
 	
-	SKIP_WHITESPACE;
+	skip_whitespace();
 	switch(token.theType) {
 		case PP_TOKEN_INCLUDE:
 		{
 			char* filename;
-			SKIP_WHITESPACE;
+			skip_whitespace();
 			
 			if(token.theType != PP_TOKEN_STRING_LITERAL) {
 				printf("Preprocessor error: %s: %i: couldn't interpret #include path '%s'\n", self->filename, token.theTextPosition.row, token.theSource);
@@ -185,7 +191,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			char name[128];
 			char* contents = tracemalloc("pp_parser_define", MACRO_CONTENTS_SIZE);
 			
-			SKIP_WHITESPACE;
+			skip_whitespace();
 			if(token.theType != PP_TOKEN_IDENTIFIER) { // Macro must have at least a name before the newline
 				printf("Preprocessor error: no macro name given in #define directive\n");
 				return E_FAIL;
@@ -196,7 +202,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			contents[0] = '\0';
 			while(1) {
 				pp_lexer_GetNextToken(&self->lexer, &token);
-				if((token.theType == PP_TOKEN_NEWLINE) || (token.theType == PP_TOKEN_EOF)) { EMIT; break; }
+				if((token.theType == PP_TOKEN_NEWLINE) || (token.theType == PP_TOKEN_EOF)) { emit(token); break; }
 				else if(strcmp(token.theSource, "\\") == 0) pp_lexer_GetNextToken(&self->lexer, &token); // allows escaping line breaks with "\"
 				
 				if((strlen(contents) + strlen(token.theSource) + 1) > MACRO_CONTENTS_SIZE) {
@@ -230,6 +236,7 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	pp_parser incparser;
 	char* buffer;
 	int length;
+	int bytes_read;
 	
 	// Open the file and determine its size
 #if PP_TEST // use stdio functions for file I/O
@@ -251,12 +258,14 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	
 	// Read the file into the buffer
 #if PP_TEST
-	fread(buffer, 1, length, fp);
+	bytes_read = fread(buffer, 1, length, fp);
 	fclose(fp);
 #else
-	readpackfile(handle, buffer, length);
+	bytes_read = readpackfile(handle, buffer, length);
 	closepackfile(handle);
 #endif
+	
+	if(bytes_read != length) { printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno)); }
 	
 	// Parse the source code in the buffer
 	pp_parser_init(&incparser, self->script, filename, buffer);

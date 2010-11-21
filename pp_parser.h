@@ -18,8 +18,8 @@
 #ifndef PP_PARSER_H
 #define PP_PARSER_H
 
-#include "List.h"
 #include "pp_lexer.h"
+#include "types.h"
 #include "openborscript.h"
 
 #define MACRO_CONTENTS_SIZE		512
@@ -29,9 +29,9 @@ typedef struct pp_parser {
     pp_lexer lexer;
     char* filename;
     char* sourceCode;
-    BOOL slashComment;
-    BOOL starComment;
-    BOOL newline;
+    bool slashComment;
+    bool starComment;
+    bool newline;
 } pp_parser;
 
 
