@@ -1,0 +1,7 @@
+preprocessorlib
+------------------------------------
+Implementation of a C preprocessor for OpenBOR's script engine, written by 
+Plombo.  Preprocessorlib development for now is done using git:
+
+Dual-licensed under LGPLv3 and the OpenBOR license.
+
