@@ -78,7 +78,6 @@ static __inline__ void emit(pp_token token)
 		int new_bufsize = token_bufsize + 1024;
 		tokens = tracerealloc(tokens, new_bufsize);
 		memset(tokens + token_bufsize, 0, new_bufsize - token_bufsize);
-		printf("Enlarged the token buffer from %d to %d\n", token_bufsize, new_bufsize); // TODO: remove this line
 		token_bufsize = new_bufsize;
 	}
 	
