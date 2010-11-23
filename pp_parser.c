@@ -140,8 +140,10 @@ HRESULT pp_parser_parse(pp_parser* self)
 	self->slashComment = 0;
 	self->starComment = 0;
 	
-	while(SUCCEEDED(pp_lexer_GetNextToken(&self->lexer, &token))) {
-		switch(token.theType) {
+	while(SUCCEEDED(pp_lexer_GetNextToken(&self->lexer, &token)))
+	{
+		switch(token.theType)
+		{
 			case PP_TOKEN_DIRECTIVE:
 				if(self->newline && !self->slashComment && !self->starComment)
 				{ /* only parse the "#" symbol when it's at the beginning of a 
@@ -201,7 +203,8 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 	pp_token token;
 	
 	skip_whitespace();
-	switch(token.theType) {
+	switch(token.theType)
+	{
 		case PP_TOKEN_INCLUDE:
 		{
 			char* filename;
@@ -224,7 +227,10 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			// FIXME: does not properly support comments after the macro definition on the same line
 			// FIXME: length of contents is limited to MACRO_CONTENTS_SIZE (512) characters
 			char name[128];
-			char* contents = tracemalloc("pp_parser_define", MACRO_CONTENTS_SIZE);
+			char* contents = tracemalloc("pp_	Reply with quoteQuote Modify messageModify
+"Neither of the links are working for me." BADCHAD
+
+the links on chinese site isn't available all the time.you must try to download often at different time to have a chance to take it. Winkparser_define", MACRO_CONTENTS_SIZE);
 			
 			skip_whitespace();
 			if(token.theType != PP_TOKEN_IDENTIFIER)
@@ -277,9 +283,15 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	int bytes_read;
 	int handle;
 	
-	// Open the file and determine its size
+	// Open the file
 	handle = openpackfile(filename, packfile);
-	if(handle < 0) return E_FAIL;
+	if(handle < 0)
+	{
+		printf("Preprocessor error: unable to open file '%s'\n", filename);
+		return E_FAIL;
+	}
+	
+	// Determine the file's size
 	seekpackfile(handle, 0, SEEK_END);
 	length = tellpackfile(handle);
 	seekpackfile(handle, 0, SEEK_SET);
