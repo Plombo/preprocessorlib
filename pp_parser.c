@@ -227,10 +227,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			// FIXME: does not properly support comments after the macro definition on the same line
 			// FIXME: length of contents is limited to MACRO_CONTENTS_SIZE (512) characters
 			char name[128];
-			char* contents = tracemalloc("pp_	Reply with quoteQuote Modify messageModify
-"Neither of the links are working for me." BADCHAD
-
-the links on chinese site isn't available all the time.you must try to download often at different time to have a chance to take it. Winkparser_define", MACRO_CONTENTS_SIZE);
+			char* contents = tracemalloc("pp_parser_define", MACRO_CONTENTS_SIZE);
 			
 			skip_whitespace();
 			if(token.theType != PP_TOKEN_IDENTIFIER)
