@@ -283,7 +283,7 @@ HRESULT pp_lexer_GetNextToken (pp_lexer* plexer, pp_token* theNextToken)
          //Create an error token, and send it to the error handler
          MAKETOKEN( PP_TOKEN_ERROR );
          //HandleCompileError( *theNextToken, UNRECOGNIZED_CHARACTER );
-         return E_FAIL;
+         return S_OK;
       }
    }
 }
