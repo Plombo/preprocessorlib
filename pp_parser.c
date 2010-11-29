@@ -187,7 +187,7 @@ HRESULT pp_parser_parse(pp_parser* self)
 				emit(token);
 		}
 	}
-	printf("Preprocessor error: end of source code reached without EOF token\n");
+	printf("Preprocessor error: %s: end of source code reached without EOF token\n", self->filename);
 	return E_FAIL;
 }
 
@@ -233,7 +233,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			if(token.theType != PP_TOKEN_IDENTIFIER)
 			{
 				// Macro must have at least a name before the newline
-				printf("Preprocessor error: no macro name given in #define directive\n");
+				printf("Preprocessor error: %s: no macro name given in #define directive\n", self->filename);
 				return E_FAIL;
 			}
 			
@@ -249,7 +249,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 				if((strlen(contents) + strlen(token.theSource) + 1) > MACRO_CONTENTS_SIZE)
 				{
 					// Prevent buffer overflow
-					printf("Preprocessor error: length of macro contents is too long; must be <= %i characters\n", MACRO_CONTENTS_SIZE);
+					printf("Preprocessor error: %s: length of macro contents is too long; must be <= %i characters\n", self->filename, MACRO_CONTENTS_SIZE);
 					return E_FAIL;
 				}
 				else strcat(contents, token.theSource);
@@ -261,7 +261,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			break;
 		}
 		default:
-			printf("Preprocessor error: unknown directive '%s'\n", token.theSource);
+			printf("Preprocessor error: %s: unknown directive '%s'\n", self->filename, token.theSource);
 			return E_FAIL;
 	}
 	
