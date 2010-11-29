@@ -506,7 +506,6 @@ HRESULT pp_lexer_GetTokenStringLiteral(pp_lexer* plexer, pp_token* theNextToken)
       if(esc)
       {
         CONSUMECHARACTER;
-        CONSUMECHARACTER;
         esc = 0;
       }
    }
