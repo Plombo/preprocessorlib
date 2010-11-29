@@ -277,10 +277,12 @@ HRESULT pp_lexer_GetNextToken (pp_lexer* plexer, pp_token* theNextToken)
 
       //If we get here, we've hit a character we don't recognize
       else{
-         //Consume the character so it can be sent to the error handler
+         //Consume the character
          CONSUMECHARACTER;
 
-         //Create an error token, and send it to the error handler
+         /* Create an "error" token, but continue normally since unrecognized 
+          * characters are none of the preprocessor's business.  Scriptlib can 
+          * deal with them if necessary. */
          MAKETOKEN( PP_TOKEN_ERROR );
          //HandleCompileError( *theNextToken, UNRECOGNIZED_CHARACTER );
          return S_OK;
