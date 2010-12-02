@@ -28,7 +28,8 @@
 #include "borendian.h"
 #include "openbor.h"
 
-#define DEFAULT_TOKEN_BUFFER_SIZE	4096
+#define DEFAULT_TOKEN_BUFFER_SIZE	(16 * 1024)
+#define TOKEN_BUFFER_SIZE_INCREMENT	(16 * 1024)
 #define skip_whitespace()			do { pp_lexer_GetNextToken(&self->lexer, &token); } while(token.theType == PP_TOKEN_WHITESPACE)
 
 #if PP_TEST // using pp_test.c to test the preprocessor functionality; OpenBOR functionality is not available
@@ -76,7 +77,7 @@ static __inline__ void emit(pp_token token)
 	int toklen = strlen(token.theSource);
 	if(toklen + tokens_length >= token_bufsize)
 	{
-		int new_bufsize = token_bufsize + 1024;
+		int new_bufsize = token_bufsize + TOKEN_BUFFER_SIZE_INCREMENT;
 		char* tokens2;
 		printf("about to realloc()...");
 		tokens2 = tracerealloc(tokens, new_bufsize, token_bufsize);
