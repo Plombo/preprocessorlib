@@ -26,6 +26,7 @@
 #include "List.h"
 #include "pp_parser.h"
 #include "borendian.h"
+#include "openbor.h"
 
 #define DEFAULT_TOKEN_BUFFER_SIZE	4096
 #define skip_whitespace()			do { pp_lexer_GetNextToken(&self->lexer, &token); } while(token.theType == PP_TOKEN_WHITESPACE)
@@ -76,9 +77,23 @@ static __inline__ void emit(pp_token token)
 	if(toklen + tokens_length >= token_bufsize)
 	{
 		int new_bufsize = token_bufsize + 1024;
-		tokens = tracerealloc(tokens, new_bufsize);
-		memset(tokens + token_bufsize, 0, new_bufsize - token_bufsize);
-		token_bufsize = new_bufsize;
+		char* tokens2;
+		printf("about to realloc()...");
+		tokens2 = tracerealloc(tokens, new_bufsize, token_bufsize);
+		if(tokens2)
+		{
+			tokens = tokens2;
+			memset(tokens + token_bufsize, 0, new_bufsize - token_bufsize);
+			token_bufsize = new_bufsize;
+		}
+		else
+		{
+			// tracerealloc() failed...
+			shutdown(1, "Fatal error: tracerealloc() failed. The system might "
+				   "be out of memory, or it may have a shoddy realloc() "
+				   "implementation.\n");
+		}
+		printf("done!\n");
 	}
 	
 	strncat(tokens, token.theSource, toklen);
