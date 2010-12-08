@@ -171,11 +171,10 @@ void pp_error(pp_parser* self, char* format, ...)
 	char buf[1024] = {""};
 	va_list arglist;
 	
-	sprintf(buf, "Preprocessor error: %s: ", self->filename);
 	va_start(arglist, format);
 	vsprintf(buf, format, arglist);
 	va_end(arglist);
-	shutdown(1, buf);
+	shutdown(1, "Preprocessor error: %s: %s\n", self->filename, buf);
 }
 
 /**
