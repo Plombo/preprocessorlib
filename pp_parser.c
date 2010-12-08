@@ -7,13 +7,12 @@
  */
 
 /**
- * This is the parser for the script preprocessor.  Its purpose is to emit(token) the 
+ * This is the parser for the script preprocessor.  Its purpose is to emit the 
  * preprocessed source code for use by scriptlib.  It is not related to the 
  * parser in scriptlib because it does something entirely different.
  * 
- * TODO: add a universal "preprocessor error" function
  * TODO/FIXME: lots of stuff with #define support
- * TODO: support conditional directives (#if, #ifdef, #ifndef, #elif, #else, #endif)
+ * TODO: support conditional directives that require expression parsing (#if, #elif)
  * 
  * @author Plombo
  * @date 15 October 2010
@@ -102,7 +101,7 @@ static __inline__ void emit(pp_token token)
 	{
 		int new_bufsize = token_bufsize + TOKEN_BUFFER_SIZE_INCREMENT;
 		char* tokens2;
-		printf("about to realloc()...");
+		//printf("about to realloc()...");
 		tokens2 = tracerealloc(tokens, new_bufsize, token_bufsize);
 		if(tokens2)
 		{
@@ -117,7 +116,7 @@ static __inline__ void emit(pp_token token)
 				   "be out of memory, or it may have a shoddy realloc() "
 				   "implementation.\n");
 		}
-		printf("done!\n");
+		//printf("done!\n");
 	}
 	
 	strncat(tokens, token.theSource, toklen);
@@ -238,7 +237,7 @@ HRESULT pp_parser_parse(pp_parser* self)
 				emit(token);
 		}
 	}
-	printf("Preprocessor error: %s: end of source code reached without EOF token\n", self->filename);
+	pp_error(self, "end of source code reached without EOF token");
 	return E_FAIL;
 }
 
@@ -263,7 +262,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			
 			if(token.theType != PP_TOKEN_STRING_LITERAL)
 			{
-				printf("Preprocessor error: %s: %i: couldn't interpret #include path '%s'\n", self->filename, token.theTextPosition.row, token.theSource);
+				pp_error(self, "line %i: couldn't interpret #include path '%s'", token.theTextPosition.row, token.theSource);
 				return E_FAIL;
 			}
 			
@@ -284,7 +283,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			if(token.theType != PP_TOKEN_IDENTIFIER)
 			{
 				// Macro must have at least a name before the newline
-				printf("Preprocessor error: %s: no macro name given in #define directive\n", self->filename);
+				pp_error(self, "no macro name given in #define directive");
 				return E_FAIL;
 			}
 			
@@ -300,7 +299,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 				if((strlen(contents) + strlen(token.theSource) + 1) > MACRO_CONTENTS_SIZE)
 				{
 					// Prevent buffer overflow
-					printf("Preprocessor error: %s: length of macro contents is too long; must be <= %i characters\n", self->filename, MACRO_CONTENTS_SIZE);
+					pp_error(self, "length of macro contents is too long; must be <= %i characters", MACRO_CONTENTS_SIZE);
 					return E_FAIL;
 				}
 				else strcat(contents, token.theSource);
@@ -321,8 +320,9 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 		case PP_TOKEN_ELSE:
 		case PP_TOKEN_ENDIF:
 			pp_parser_conditional(self, token.theType);
+			break;
 		default:
-			printf("Preprocessor error: %s: unknown directive '%s'\n", self->filename, token.theSource);
+			pp_error(self, "unknown directive '%s'", token.theSource);
 			return E_FAIL;
 	}
 	
@@ -349,7 +349,7 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	if(handle < 0)
 #endif
 	{
-		printf("Preprocessor error: unable to open file '%s'\n", filename);
+		pp_error(self, "unable to open file '%s'", filename);
 		return E_FAIL;
 	}
 	
@@ -368,7 +368,7 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	
 	if(bytes_read != length)
 	{
-		printf("Preprocessor I/O error: %s: %s\n", filename, strerror(errno));
+		pp_error(self, "I/O error: %s", strerror(errno));
 		return E_FAIL;
 	}
 	
@@ -439,7 +439,8 @@ bool pp_parser_eval_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
 		case PP_TOKEN_ELIF:
 			pp_error(self, "#elif directive not yet supported");
 			break;
-		default: pp_error(self, "internal error: evaluating an unknown conditional type");
+		default:
+			pp_error(self, "internal error: evaluating an unknown conditional type");
 	}
 	
 	return false;
