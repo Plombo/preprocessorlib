@@ -378,6 +378,8 @@ HRESULT pp_lexer_GetTokenIdentifier(pp_lexer* plexer, pp_token* theNextToken)
       MAKETOKEN( PP_TOKEN_INCLUDE );}
    else if (!strcmp( plexer->theTokenSource, "define")){
       MAKETOKEN( PP_TOKEN_DEFINE );}
+   else if (!strcmp( plexer->theTokenSource, "undef")){
+      MAKETOKEN( PP_TOKEN_UNDEF );}
    else if (!strcmp( plexer->theTokenSource, "pragma")){
       MAKETOKEN( PP_TOKEN_PRAGMA );}
    else if (!strcmp( plexer->theTokenSource, "ifdef")){

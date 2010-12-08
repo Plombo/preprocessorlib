@@ -34,17 +34,18 @@ typedef struct pp_parser {
     bool newline;
 } pp_parser;
 
+// FIXME: nothing outside of pp_parser has any business accessing the token buffer
 extern char* tokens;
 
-//Constructor
 void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourceCode);
 void pp_parser_reset();
+void pp_error(pp_parser* self, char* format, ...);
 HRESULT pp_parser_parse(pp_parser* self);
 HRESULT pp_parser_parse_directive(pp_parser* self);
 HRESULT pp_parser_include(pp_parser* self, char* filename);
+HRESULT pp_parser_conditional(pp_parser* self, PP_TOKEN_TYPE directive);
+bool pp_parser_eval_conditional(pp_parser* self, PP_TOKEN_TYPE directive);
 void pp_parser_insert_macro(pp_parser* self, char* name);
 
 #endif
-
-
 

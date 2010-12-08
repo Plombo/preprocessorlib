@@ -21,12 +21,12 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <malloc.h>
 #include <errno.h>
 #include "List.h"
 #include "pp_parser.h"
 #include "borendian.h"
-#include "openbor.h"
 
 #define DEFAULT_TOKEN_BUFFER_SIZE	(16 * 1024)
 #define TOKEN_BUFFER_SIZE_INCREMENT	(16 * 1024)
@@ -36,16 +36,18 @@
 #undef printf
 #define tracemalloc(name, size)		malloc(size)
 #define tracecalloc(name, size)		calloc(1, size)
-#define tracerealloc(ptr, size)		realloc(ptr, size)
+#define tracerealloc(ptr, size, os)	realloc(ptr, size)
 #define tracefree(ptr)				free(ptr)
 #define openpackfile(fname, pname)	((int)fopen(fname, "rb"))
 #define readpackfile(hnd, buf, len)	fread(buf, 1, len, (FILE*)hnd)
 #define seekpackfile(hnd, loc, md)	fseek((FILE*)hnd, loc, md)
 #define tellpackfile(hnd)			ftell((FILE*)hnd)
 #define closepackfile(hnd)			fclose((FILE*)hnd)
+#define shutdown(ret, msg, args...) { fprintf(stderr, msg, ##args); exit(ret); }
 #else // otherwise, we can use OpenBOR functionality like tracemalloc and writeToLogFile
-#include "tracemalloc.h"
+#include "openbor.h"
 #include "globals.h"
+#include "tracemalloc.h"
 #include "packfile.h"
 #define tellpackfile(hnd)			seekpackfile(hnd, 0, SEEK_CUR)
 #endif
@@ -65,6 +67,27 @@ List macros = {NULL, NULL, NULL, NULL, 0, 0};
 char* tokens = NULL;
 static int token_bufsize = 0;
 static int tokens_length = 0;
+
+/**
+ * Stack of conditional directives.  The preprocessor can handle up to 16 nested 
+ * conditionals.  The stack is implemented efficiently as a 32-bit value.
+ */
+union {
+	int all;
+	struct {
+		unsigned others:30;
+		unsigned top:2;
+	};
+} conditionals;
+
+int num_conditionals = 0;
+
+enum conditional_state {
+	cs_none = 0,
+	cs_true = 1,
+	cs_false = 2,
+	cs_done = 3
+};
 
 /**
  * Emits a token to the token buffer, enlarging the token buffer if necessary. 
@@ -142,6 +165,18 @@ void pp_parser_reset()
 		tokens = NULL;
 		token_bufsize = tokens_length = 0;
 	}
+}
+
+void pp_error(pp_parser* self, char* format, ...)
+{
+	char buf[1024] = {""};
+	va_list arglist;
+	
+	sprintf(buf, "Preprocessor error: %s: ", self->filename);
+	va_start(arglist, format);
+	vsprintf(buf, format, arglist);
+	va_end(arglist);
+	shutdown(1, buf);
 }
 
 /**
@@ -255,10 +290,10 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			
 			// Parse macro name and contents
 			strcpy(name, token.theSource);
+			skip_whitespace();
 			contents[0] = '\0';
 			while(1)
 			{
-				pp_lexer_GetNextToken(&self->lexer, &token);
 				if((token.theType == PP_TOKEN_NEWLINE) || (token.theType == PP_TOKEN_EOF)) { emit(token); break; }
 				else if(strcmp(token.theSource, "\\") == 0) pp_lexer_GetNextToken(&self->lexer, &token); // allows escaping line breaks with "\"
 				
@@ -269,13 +304,23 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 					return E_FAIL;
 				}
 				else strcat(contents, token.theSource);
+				pp_lexer_GetNextToken(&self->lexer, &token);
 			}
 			
 			// Add macro to list
 			List_InsertAfter(&macros, contents, name);
-			
 			break;
 		}
+		case PP_TOKEN_UNDEF:
+			pp_error(self, "#undef is not implemented yet");
+			break;
+		case PP_TOKEN_IF:
+		case PP_TOKEN_IFDEF:
+		case PP_TOKEN_IFNDEF:
+		case PP_TOKEN_ELIF:
+		case PP_TOKEN_ELSE:
+		case PP_TOKEN_ENDIF:
+			pp_parser_conditional(self, token.theType);
 		default:
 			printf("Preprocessor error: %s: unknown directive '%s'\n", self->filename, token.theSource);
 			return E_FAIL;
@@ -298,7 +343,11 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	
 	// Open the file
 	handle = openpackfile(filename, packfile);
+#ifdef PP_TEST
+	if(!handle)
+#else
 	if(handle < 0)
+#endif
 	{
 		printf("Preprocessor error: unable to open file '%s'\n", filename);
 		return E_FAIL;
@@ -331,6 +380,69 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	tracefree(buffer);
 	
 	return S_OK;
+}
+
+/**
+ * Handles conditional directives.
+ * @param directive the type of conditional directive
+ */
+HRESULT pp_parser_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
+{
+	switch(directive)
+	{
+		case PP_TOKEN_IF:
+		case PP_TOKEN_IFDEF:
+		case PP_TOKEN_IFNDEF:
+			if(num_conditionals++ > 16) pp_error(self, "too many levels of nested conditional directives");
+			conditionals.all <<= 2; // push a new conditional state onto the stack
+			conditionals.top = pp_parser_eval_conditional(self, directive) ? cs_true : cs_false;
+			break;
+		case PP_TOKEN_ELIF:
+			if(conditionals.top == cs_done || conditionals.top == cs_true)
+				conditionals.top = cs_done;
+			else
+				conditionals.top = pp_parser_eval_conditional(self, directive) ? cs_true : cs_false;
+			break;
+		case PP_TOKEN_ELSE:
+			if(conditionals.top == cs_none) pp_error(self, "stray #else");
+			conditionals.top = conditionals.top == cs_false ? cs_true : cs_false;
+			break;
+		case PP_TOKEN_ENDIF:
+			if(conditionals.top == cs_none || num_conditionals-- < 0) pp_error(self, "stray #endif");
+			conditionals.all >>= 2; // pop a conditional state from the stack
+			break;
+		default:
+			pp_error(self, "unknown conditional directive type (ID=%d)", directive);
+	}
+	
+	return S_OK;
+}
+
+bool pp_parser_eval_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
+{
+	pp_token token;
+	
+	// all directives can have whitespace between the directive and the contents
+	skip_whitespace();
+	
+	switch(directive)
+	{
+		case PP_TOKEN_IFDEF:
+			pp_lexer_GetNextToken(&self->lexer, &token); // FIXME: this and should others should check for E_FAIL
+			return List_FindByName(&macros, token.theSource);
+		case PP_TOKEN_IFNDEF:
+			pp_lexer_GetNextToken(&self->lexer, &token);
+			return !List_FindByName(&macros, token.theSource);
+		case PP_TOKEN_IF:
+			pp_error(self, "#if directive not yet supported");
+			break;
+		case PP_TOKEN_ELIF:
+			pp_error(self, "#elif directive not yet supported");
+			break;
+		default: pp_error(self, "internal error: evaluating an unknown conditional type");
+	}
+	
+	return false;
 }
 
 /**
