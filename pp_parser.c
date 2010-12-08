@@ -106,7 +106,6 @@ static __inline__ void emit(pp_token token)
 	{
 		int new_bufsize = token_bufsize + TOKEN_BUFFER_SIZE_INCREMENT;
 		char* tokens2;
-		//printf("about to realloc()...");
 		tokens2 = tracerealloc(tokens, new_bufsize, token_bufsize);
 		if(tokens2)
 		{
@@ -121,7 +120,6 @@ static __inline__ void emit(pp_token token)
 				   "be out of memory, or it may have a shoddy realloc() "
 				   "implementation.\n");
 		}
-		//printf("done!\n");
 	}
 	
 	strncat(tokens, token.theSource, toklen);
