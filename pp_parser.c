@@ -97,6 +97,11 @@ enum conditional_state {
 static __inline__ void emit(pp_token token)
 {
 	int toklen = strlen(token.theSource);
+	
+	// don't emit anything if the current conditional block evaluates to false
+	if(conditionals.top == cs_false || conditionals.top == cs_done)
+		return;
+	
 	if(toklen + tokens_length >= token_bufsize)
 	{
 		int new_bufsize = token_bufsize + TOKEN_BUFFER_SIZE_INCREMENT;
@@ -310,7 +315,9 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			break;
 		}
 		case PP_TOKEN_UNDEF:
-			pp_error(self, "#undef is not implemented yet");
+			skip_whitespace();
+			if(List_FindByName(&macros, token.theSource))
+				List_Remove(&macros);
 			break;
 		case PP_TOKEN_IF:
 		case PP_TOKEN_IFDEF:
@@ -404,7 +411,7 @@ HRESULT pp_parser_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
 			break;
 		case PP_TOKEN_ELSE:
 			if(conditionals.top == cs_none) pp_error(self, "stray #else");
-			conditionals.top = conditionals.top == cs_false ? cs_true : cs_false;
+			conditionals.top = (conditionals.top == cs_false) ? cs_true : cs_false;
 			break;
 		case PP_TOKEN_ENDIF:
 			if(conditionals.top == cs_none || num_conditionals-- < 0) pp_error(self, "stray #endif");
@@ -427,10 +434,8 @@ bool pp_parser_eval_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
 	switch(directive)
 	{
 		case PP_TOKEN_IFDEF:
-			pp_lexer_GetNextToken(&self->lexer, &token); // FIXME: this and should others should check for E_FAIL
 			return List_FindByName(&macros, token.theSource);
 		case PP_TOKEN_IFNDEF:
-			pp_lexer_GetNextToken(&self->lexer, &token);
 			return !List_FindByName(&macros, token.theSource);
 		case PP_TOKEN_IF:
 			pp_error(self, "#if directive not yet supported");
