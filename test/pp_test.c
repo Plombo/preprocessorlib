@@ -66,6 +66,7 @@ bool parseFile(char* filename)
 	fclose(fp);
 	if(!success) return false;
 	
+	pp_parser_reset();
 	pp_parser_init(&parser, NULL, filename, buffer);
 	success = SUCCEEDED(pp_parser_parse(&parser));
 	
