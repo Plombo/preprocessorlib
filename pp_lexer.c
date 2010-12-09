@@ -110,7 +110,6 @@ void pp_lexer_Clear(pp_lexer* plexer)
 ******************************************************************************/
 HRESULT pp_lexer_GetNextToken (pp_lexer* plexer, pp_token* theNextToken)
 {
-   //start a whitespace-eating loop
    for(;;){
       memset(plexer->theTokenSource, 0, MAX_PP_TOKEN_LENGTH * sizeof(CHAR));
       plexer->theTokenPosition = plexer->theTextPosition;
@@ -390,6 +389,10 @@ HRESULT pp_lexer_GetTokenIdentifier(pp_lexer* plexer, pp_token* theNextToken)
       MAKETOKEN( PP_TOKEN_ELIF );}
    else if (!strcmp( plexer->theTokenSource, "endif")){
       MAKETOKEN( PP_TOKEN_ENDIF );}
+   else if (!strcmp( plexer->theTokenSource, "warning")){
+      MAKETOKEN( PP_TOKEN_WARNING );}
+   else if (!strcmp( plexer->theTokenSource, "error")){
+      MAKETOKEN( PP_TOKEN_ERROR_TEXT );} // this is completely different from PP_TOKEN_ERROR!
    else{
       MAKETOKEN( PP_TOKEN_IDENTIFIER );}
 

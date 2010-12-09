@@ -13,6 +13,7 @@
  * 
  * TODO/FIXME: lots of stuff with #define support
  * TODO: support conditional directives that require expression parsing (#if, #elif)
+ * TODO: move the resizable buffer functionality into a separate class
  * 
  * @author Plombo
  * @date 15 October 2010
@@ -58,10 +59,8 @@
 List macros = {NULL, NULL, NULL, NULL, 0, 0};
 
 /**
- * TODO: Do this in a way that doesn't cause insane memory fragmentation, e.g. use a 
- * single buffer for all tokens and realloc() it if we need more space.  Even 
- * better, we could just use the buffer to store the resulting string, and not 
- * have to deal with concatenating all of the tokens when we're finished.
+ * The token buffer.  Like the macro list, it is defined globally because it 
+ * doesn't die when parsers do.  It is realloc()ed if it needs to be enlarged.
  */
 char* tokens = NULL;
 static int token_bufsize = 0;
@@ -69,13 +68,13 @@ static int tokens_length = 0;
 
 /**
  * Stack of conditional directives.  The preprocessor can handle up to 16 nested 
- * conditionals.  The stack is implemented efficiently as a 32-bit value.
+ * conditionals.  The stack is implemented as a 32-bit integer.
  */
 union {
 	int all;
 	struct {
-		unsigned others:30;
 		unsigned top:2;
+		unsigned others:30;
 	};
 } conditionals;
 
@@ -149,26 +148,34 @@ void pp_parser_init(pp_parser* self, Script* script, char* filename, char* sourc
 }
 
 /**
- * Undefines and frees all currently defined macros.  This should be called 
- * before and after preprocessing a script.
+ * Frees the entire global parser state.  This should be called before and after
+ * preprocessing a script.
  */
 void pp_parser_reset()
 {
-	List_Reset(&macros); // start at first element in list
+	// undefine and free all macros
+	List_Reset(&macros);
 	while(macros.size > 0)
 	{
 		tracefree(List_Retrieve(&macros));
 		List_Remove(&macros);
 	}
 	
+	// free the token buffer
 	if(tokens != NULL)
 	{
 		tracefree(tokens);
 		tokens = NULL;
 		token_bufsize = tokens_length = 0;
 	}
+	
+	// reset the conditional state
+	conditionals.all = 0;
 }
 
+/**
+ * Exits the preprocessor with an error message.
+ */
 void pp_error(pp_parser* self, char* format, ...)
 {
 	char buf[1024] = {""};
@@ -177,7 +184,21 @@ void pp_error(pp_parser* self, char* format, ...)
 	va_start(arglist, format);
 	vsprintf(buf, format, arglist);
 	va_end(arglist);
-	shutdown(1, "Preprocessor error: %s: %s\n", self->filename, buf);
+	shutdown(1, "Preprocessor error: %s: line %d: %s\n", self->filename, self->lexer.theTokenPosition.row + 1, buf);
+}
+
+/**
+ * Writes a warning message to the log.
+ */
+void pp_warning(pp_parser* self, char* format, ...)
+{
+	char buf[1024] = {""};
+	va_list arglist;
+	
+	va_start(arglist, format);
+	vsprintf(buf, format, arglist);
+	va_end(arglist);
+	printf("Preprocessor warning: %s: line %d: %s\n", self->filename, self->lexer.theTokenPosition.row + 1, buf);
 }
 
 /**
@@ -243,6 +264,33 @@ HRESULT pp_parser_parse(pp_parser* self)
 	return E_FAIL;
 }
 
+// TODO: use resizable buffers to preclude these stupid overflow errors
+// FIXME: does not properly support comments on the same line after the message or macro definition
+void pp_parser_readline(pp_parser* self, char* buf, int bufsize)
+{
+	pp_token token;
+	int total_length = 1;
+	
+	buf[0] = '\0';
+	skip_whitespace();
+	while(1)
+	{
+		if((token.theType == PP_TOKEN_NEWLINE) || (token.theType == PP_TOKEN_EOF)) { emit(token); break; }
+		else if(strcmp(token.theSource, "\\") == 0) pp_lexer_GetNextToken(&self->lexer, &token); // allows escaping line breaks with "\"
+		
+		if((total_length + strlen(token.theSource)) > bufsize)
+		{
+			// Prevent buffer overflow
+			// FIXME: this is used for more than just macros now; change the message!
+			pp_error(self, "length of macro contents is too long; must be <= %i characters", bufsize);
+		}
+		
+		strcat(buf, token.theSource);
+		total_length += strlen(token.theSource);
+		pp_lexer_GetNextToken(&self->lexer, &token);
+	}
+}
+
 /**
  * Parses a C preprocessor directive.  When this function is called, the token
  * '#' has just been detected by the compiler.
@@ -255,6 +303,18 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 	pp_token token;
 	
 	skip_whitespace();
+	
+	// most directives shouldn't be parsed if we're in the middle of a conditional false
+	if(conditionals.top == cs_false || conditionals.top == cs_done)
+	{
+		if(token.theType != PP_TOKEN_ELIF &&
+		   token.theType != PP_TOKEN_ELSE &&
+		   token.theType != PP_TOKEN_ENDIF)
+		{
+			return S_OK;
+		}
+	}
+	
 	switch(token.theType)
 	{
 		case PP_TOKEN_INCLUDE:
@@ -264,7 +324,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			
 			if(token.theType != PP_TOKEN_STRING_LITERAL)
 			{
-				pp_error(self, "line %i: couldn't interpret #include path '%s'", token.theTextPosition.row, token.theSource);
+				pp_error(self, "couldn't interpret #include path '%s'", token.theSource);
 				return E_FAIL;
 			}
 			
@@ -276,7 +336,6 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 		case PP_TOKEN_DEFINE:
 		{
 			// FIXME: this will only work if the macro name is on the same line as the "#define"
-			// FIXME: does not properly support comments after the macro definition on the same line
 			// FIXME: length of contents is limited to MACRO_CONTENTS_SIZE (512) characters
 			char name[128];
 			char* contents = tracemalloc("pp_parser_define", MACRO_CONTENTS_SIZE);
@@ -291,22 +350,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			
 			// Parse macro name and contents
 			strcpy(name, token.theSource);
-			skip_whitespace();
-			contents[0] = '\0';
-			while(1)
-			{
-				if((token.theType == PP_TOKEN_NEWLINE) || (token.theType == PP_TOKEN_EOF)) { emit(token); break; }
-				else if(strcmp(token.theSource, "\\") == 0) pp_lexer_GetNextToken(&self->lexer, &token); // allows escaping line breaks with "\"
-				
-				if((strlen(contents) + strlen(token.theSource) + 1) > MACRO_CONTENTS_SIZE)
-				{
-					// Prevent buffer overflow
-					pp_error(self, "length of macro contents is too long; must be <= %i characters", MACRO_CONTENTS_SIZE);
-					return E_FAIL;
-				}
-				else strcat(contents, token.theSource);
-				pp_lexer_GetNextToken(&self->lexer, &token);
-			}
+			pp_parser_readline(self, contents, MACRO_CONTENTS_SIZE);
 			
 			// Add macro to list
 			List_InsertAfter(&macros, contents, name);
@@ -325,6 +369,20 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 		case PP_TOKEN_ENDIF:
 			pp_parser_conditional(self, token.theType);
 			break;
+		case PP_TOKEN_WARNING:
+		case PP_TOKEN_ERROR_TEXT:
+		{
+			char text[256] = {""};
+			PP_TOKEN_TYPE msgType = token.theType; // "token" is about to be clobbered, so save whether this is a warning or error
+			
+			pp_parser_readline(self, text, sizeof(text));
+			
+			if(msgType == PP_TOKEN_WARNING)
+				pp_warning(self, "#warning %s", text);
+			else
+				pp_error(self, "#error %s", text);
+			break;
+		}
 		default:
 			pp_error(self, "unknown directive '%s'", token.theSource);
 			return E_FAIL;
@@ -426,7 +484,7 @@ bool pp_parser_eval_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
 {
 	pp_token token;
 	
-	// all directives can have whitespace between the directive and the contents
+	// all directives have whitespace between the directive and the contents
 	skip_whitespace();
 	
 	switch(directive)
