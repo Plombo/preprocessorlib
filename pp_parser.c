@@ -202,10 +202,10 @@ void pp_warning(pp_parser* self, char* format, ...)
 }
 
 /**
- * Preprocesses the entire source file.
- * @return S_OK on success, E_FAIL on failure
+ * Preprocesses the entire source file.  Will shut down the engine if it fails 
+ * (no real way to recover), so no need for a return value.
  */
-HRESULT pp_parser_parse(pp_parser* self)
+void pp_parser_parse(pp_parser* self)
 {
 	pp_token token;
 	
@@ -299,7 +299,7 @@ void pp_parser_readline(pp_parser* self, char* buf, int bufsize)
  * is still limited, as macros can only be 512 characters long and "function-like" 
  * macros are not supported.
  */
-HRESULT pp_parser_parse_directive(pp_parser* self) {
+void pp_parser_parse_directive(pp_parser* self) {
 	pp_token token;
 	
 	skip_whitespace();
@@ -311,7 +311,7 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 		   token.theType != PP_TOKEN_ELSE &&
 		   token.theType != PP_TOKEN_ENDIF)
 		{
-			return S_OK;
+			return;
 		}
 	}
 	
@@ -325,13 +325,13 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			if(token.theType != PP_TOKEN_STRING_LITERAL)
 			{
 				pp_error(self, "couldn't interpret #include path '%s'", token.theSource);
-				return E_FAIL;
 			}
 			
 			filename = token.theSource + 1; // trim first " mark
 			filename[strlen(filename)-1] = '\0'; // trim last " mark
 			
-			return pp_parser_include(self, filename);
+			pp_parser_include(self, filename);
+			break;
 		}
 		case PP_TOKEN_DEFINE:
 		{
@@ -345,7 +345,6 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 			{
 				// Macro must have at least a name before the newline
 				pp_error(self, "no macro name given in #define directive");
-				return E_FAIL;
 			}
 			
 			// Parse macro name and contents
@@ -385,17 +384,14 @@ HRESULT pp_parser_parse_directive(pp_parser* self) {
 		}
 		default:
 			pp_error(self, "unknown directive '%s'", token.theSource);
-			return E_FAIL;
 	}
-	
-	return S_OK;
 }
 
 /**
  * Includes a source file specified with the #include directive.
  * @param filename the path to include
  */
-HRESULT pp_parser_include(pp_parser* self, char* filename)
+void pp_parser_include(pp_parser* self, char* filename)
 {
 	pp_parser incparser;
 	char* buffer;
@@ -412,7 +408,6 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 #endif
 	{
 		pp_error(self, "unable to open file '%s'", filename);
-		return E_FAIL;
 	}
 	
 	// Determine the file's size
@@ -431,7 +426,6 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	if(bytes_read != length)
 	{
 		pp_error(self, "I/O error: %s", strerror(errno));
-		return E_FAIL;
 	}
 	
 	// Parse the source code in the buffer
@@ -440,15 +434,13 @@ HRESULT pp_parser_include(pp_parser* self, char* filename)
 	
 	// Free the buffer to prevent memory leaks
 	tracefree(buffer);
-	
-	return S_OK;
 }
 
 /**
  * Handles conditional directives.
  * @param directive the type of conditional directive
  */
-HRESULT pp_parser_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
+void pp_parser_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
 {
 	switch(directive)
 	{
@@ -476,8 +468,6 @@ HRESULT pp_parser_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
 		default:
 			pp_error(self, "unknown conditional directive type (ID=%d)", directive);
 	}
-	
-	return S_OK;
 }
 
 bool pp_parser_eval_conditional(pp_parser* self, PP_TOKEN_TYPE directive)
