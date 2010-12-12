@@ -221,7 +221,7 @@ void pp_parser_parse(pp_parser* self)
 				if(self->newline && !self->slashComment && !self->starComment)
 				{ /* only parse the "#" symbol when it's at the beginning of a 
 				   * line (ignoring whitespace) and not in a comment */
-					if(FAILED(pp_parser_parse_directive(self))) return E_FAIL;
+					pp_parser_parse_directive(self);
 				} else emit(token);
 				break;
 			case PP_TOKEN_COMMENT_SLASH:
@@ -254,14 +254,15 @@ void pp_parser_parse(pp_parser* self)
 				break;
 			case PP_TOKEN_EOF:
 				emit(token);
-				return S_OK;
+				return; // we're done
 			default:
 				self->newline = 0;
 				emit(token);
 		}
 	}
+	
+	// if we get here, the stream doesn't have an EOF token
 	pp_error(self, "end of source code reached without EOF token");
-	return E_FAIL;
 }
 
 // TODO: use resizable buffers to preclude these stupid overflow errors
