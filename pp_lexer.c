@@ -220,14 +220,16 @@ HRESULT pp_lexer_GetNextToken (pp_lexer* plexer, pp_token* theNextToken)
       else if ( !strncmp( plexer->pcurChar, "/", 1)){
          CONSUMECHARACTER;
          if ( !strncmp( plexer->pcurChar, "/", 1)){
-            CONSUMECHARACTER;
-            MAKETOKEN( PP_TOKEN_COMMENT_SLASH );
-            return S_OK;
+            pp_lexer_SkipComment(plexer, COMMENT_SLASH);
+            //CONSUMECHARACTER;
+            //MAKETOKEN( PP_TOKEN_COMMENT_SLASH );
+            //return S_OK;
          }
          else if ( !strncmp( plexer->pcurChar, "*", 1)){
-            CONSUMECHARACTER;
-            MAKETOKEN( PP_TOKEN_COMMENT_STAR_BEGIN );
-            return S_OK;
+            pp_lexer_SkipComment(plexer, COMMENT_STAR);
+            //CONSUMECHARACTER;
+            //MAKETOKEN( PP_TOKEN_COMMENT_STAR_BEGIN );
+            //return S_OK;
          }
 
          //Now complete the symbol scan for regular symbols.
@@ -846,6 +848,64 @@ HRESULT pp_lexer_GetTokenSymbol(pp_lexer* plexer, pp_token* theNextToken)
    {
       CONSUMECHARACTER;
       MAKETOKEN( PP_TOKEN_CONDITIONAL);
+   }
+
+   return S_OK;
+}
+
+/******************************************************************************
+*  Comment -- This method extracts a symbol from the character stream.
+*  Parameters: theNextToken -- address of the next CToken found in the stream
+*  Returns: S_OK
+*           E_FAIL
+******************************************************************************/
+HRESULT pp_lexer_SkipComment(pp_lexer* plexer, COMMENT_TYPE theType)
+{
+
+   if (theType == COMMENT_SLASH){
+      do{
+         SKIPCHARACTER;
+         //break out if we hit a new line
+         if (!strncmp( plexer->pcurChar, "\n", 1)){
+            plexer->theTextPosition.col = 0;
+            plexer->theTextPosition.row++;
+            break;
+         }
+         else if (!strncmp( plexer->pcurChar, "\r", 1)){
+            plexer->theTextPosition.col = 0;
+            //plexer->theTextPosition.row++;
+            break;
+         }
+         else if (!strncmp( plexer->pcurChar, "\f", 1)){
+            plexer->theTextPosition.row++;
+            break;
+         }
+      }while (strncmp( plexer->pcurChar, "\0", 1));
+   }
+   else if (theType == COMMENT_STAR){
+      //consume the '*' that gets this comment started
+      SKIPCHARACTER;
+
+      //loop through the characters till we hit '*/'
+      while (strncmp( plexer->pcurChar, "\0", 1)){
+         if (0==strncmp( plexer->pcurChar, "*/", 2)){
+            SKIPCHARACTER;
+            SKIPCHARACTER;
+            break;
+         }
+         else if (!strncmp( plexer->pcurChar, "\n", 1)){
+            plexer->theTextPosition.col = 0;
+            plexer->theTextPosition.row++;
+         }
+         else if (!strncmp( plexer->pcurChar, "\r", 1)){
+            plexer->theTextPosition.col = 0;
+            //plexer->theTextPosition.row++;
+         }
+         else if (!strncmp( plexer->pcurChar, "\f", 1)){
+            plexer->theTextPosition.row++;
+         }
+         SKIPCHARACTER;
+      };
    }
 
    return S_OK;
